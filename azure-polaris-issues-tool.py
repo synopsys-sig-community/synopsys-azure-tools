@@ -540,14 +540,14 @@ where SPEC is a comma delimited list of one or more of the following:
             title = "Coverity - " + issue['name'] +"  in " + main_file
             assignedTo = ""
             workItemType = "Issue"
-            if (args.azworkitem):
-                wi = createAzWorkItem(title, ticket_body, assignedTo, workItemType, issue)
-                azWorkItem = dict()
-                azWorkItem['name'] = issue['name']
-                azWorkItem['cwe'] = issue['cwe']
-                azWorkItem['main_file'] = main_file
-                azWorkItem['url'] = wi['_links']['html']['href']
-                azWorkItemsCreated.append(azWorkItem)
+
+            wi = createAzWorkItem(title, ticket_body, assignedTo, workItemType, issue)
+            azWorkItem = dict()
+            azWorkItem['name'] = issue['name']
+            azWorkItem['cwe'] = issue['cwe']
+            azWorkItem['main_file'] = main_file
+            azWorkItem['url'] = wi['_links']['html']['href']
+            azWorkItemsCreated.append(azWorkItem)
 
             print(azWorkItemsCreated)
             print("EXIT EARLY...")
