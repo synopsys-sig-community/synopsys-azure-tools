@@ -7,36 +7,26 @@ import argparse
 import urllib
 import glob
 import requests
-from requests_toolbelt.utils import dump
 import base64
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
         description='Post Coverity issue summary to Azure Repos Pull Request Threads')
 parser.add_argument('--debug', default=0, help='set debug level [0-9]')
-parser.add_argument('mergeKeys', nargs=argparse.REMAINDER)
 args = parser.parse_args()
 
 debug = int(args.debug)
-mergeKeys = args.mergeKeys
-
-# Populate a map with the merge keys we want
-mergeKeysToMatch = dict()
-for mergeKey in mergeKeys:
-    print("Match Merge Key: " + mergeKey)
-    mergeKeysToMatch[mergeKey] = 1
 
 #jsonFiles = glob.glob("./.synopsys/polaris/diagnostics/analyze,*/local-analysis/results/incremental-results.json")
 jsonFiles  = glob.glob("./.synopsys/polaris/data/coverity/*/idir/incremental-results/incremental-results.json")
-#jsonFiles = glob.glob("./incremental-results.json")
 jsonFile = jsonFiles[0]
 
 # Process output from Polaris CLI
 with open(jsonFile) as f:
   data = json.load(f)
 
-print("Reading incremental analysis results from " + jsonFile)
-#if(debug): print("DEBUG: " + json.dumps(data, indent = 4, sort_keys=True) + "\n")
+print("INFO: Reading Polaris incremental analysis results from " + jsonFile)
+if(debug): print("DEBUG: " + json.dumps(data, indent = 4, sort_keys=True) + "\n")
 
 # Loop through found issues for specified merge keys, and build out output map
 # TODO: Can there be multiple entries for the merge key? I think the right thing would be to list all of them.
@@ -47,65 +37,61 @@ vulnerabilities = []
 azComments = []
 
 for item in data["issues"]:
-    checkerName = item["checkerName"]
-    print("DEBUG: Checker " + checkerName)
-    checkerProperties = item["checkerProperties"]
-    subcategoryShortDescription = checkerProperties["subcategoryShortDescription"]
-    subcategoryLongDescription = checkerProperties["subcategoryLongDescription"]
-    cwe = checkerProperties["cweCategory"]
-    impact = checkerProperties["impact"]
-    codeLangauge = item["code-language"]
-    mergeKey = item["mergeKey"]
-    strippedMainEventFilePathname = item["strippedMainEventFilePathname"]
-    mainEventLineNumber = item["mainEventLineNumber"]
+  checkerName = item["checkerName"]
+  checkerProperties = item["checkerProperties"]
+  subcategoryShortDescription = checkerProperties["subcategoryShortDescription"]
+  subcategoryLongDescription = checkerProperties["subcategoryLongDescription"]
+  cwe = checkerProperties["cweCategory"]
+  impact = checkerProperties["impact"]
+  codeLangauge = item["code-language"]
+  mergeKey = item["mergeKey"]
+  strippedMainEventFilePathname = item["strippedMainEventFilePathname"]
+  mainEventLineNumber = item["mainEventLineNumber"]
 
-    eventNumber = 1
-    #if mergeKey in mergeKeysToMatch:
-    # No longer need to filter by explicit merge keys, since Polaris can tell us what's new
-    if 1:
-      description = ""
-      start_line = 0
-      location = dict();
+  eventNumber = 1
+  description = ""
+  start_line = 0
+  location = dict();
 
-      for event in item["events"]:
-        if event["main"]:
-          location["file"] = event["strippedFilePathname"]
-          start_line = event["lineNumber"]
-          description = description + "" + event["eventDescription"]
+  for event in item["events"]:
+    if event["main"]:
+      location["file"] = event["strippedFilePathname"]
+      start_line = event["lineNumber"]
+      description = description + "" + event["eventDescription"]
 
-        if event["remediation"]:
-          description = description + "\n\n" + event["eventDescription"]
+    if event["remediation"]:
+      description = description + "\n\n" + event["eventDescription"]
 
-      newComment = dict()
+  newComment = dict()
 
-      comments = []
-      comment = dict()
-      comment["parentCommentId"] = 0
-      comment["commentType"] = 1
-      commentContent = ":warning: Coverity Static Analysis found this issue with your code:\n\n" + description + "\n\n[View the full issue report in Coverity](http://synopsys.com)"
-      comment["content"] = commentContent
-      comments.append(comment)
-      newComment["comments"] = comments
+  comments = []
+  comment = dict()
+  comment["parentCommentId"] = 0
+  comment["commentType"] = 1
+  commentContent = ":warning: Coverity Static Analysis found this issue with your code:\n\n" + description + "\n\n[View the full issue report in Coverity](http://synopsys.com)"
+  comment["content"] = commentContent
+  comments.append(comment)
+  newComment["comments"] = comments
 
-      threadContext = dict()
+  threadContext = dict()
 
-      rightFileEnd = dict()
-      rightFileEnd["line"] = start_line
-      rightFileEnd["offset"] = 1
+  rightFileEnd = dict()
+  rightFileEnd["line"] = start_line
+  rightFileEnd["offset"] = 1
 
-      rightFileStart = dict()
-      rightFileStart["line"] = start_line
-      rightFileStart["offset"] = 1
+  rightFileStart = dict()
+  rightFileStart["line"] = start_line
+  rightFileStart["offset"] = 1
 
-      threadContext["filePath"] = "/" + location["file"]
-      threadContext["rightFileEnd"] = rightFileEnd
-      threadContext["rightFileStart"] = rightFileStart
+  threadContext["filePath"] = "/" + location["file"]
+  threadContext["rightFileEnd"] = rightFileEnd
+  threadContext["rightFileStart"] = rightFileStart
 
-      newComment["threadContext"] = threadContext
+  newComment["threadContext"] = threadContext
 
-      newComment["status"] = "active"
+  newComment["status"] = "active"
 
-      azComments.append(newComment)
+  azComments.append(newComment)
 
 # Ad commensts to PR
 SYSTEM_COLLECTIONURI = os.getenv('SYSTEM_COLLECTIONURI')
@@ -125,13 +111,11 @@ headers = {
 }
 
 for comment in azComments:
-  print("DEBUG: perform API Call to ADO" + url +" : " + json.dumps(comment, indent = 4, sort_keys=True) + "\n")
+  if (debug): print("DEBUG: perform API Call to ADO" + url +" : " + json.dumps(comment, indent = 4, sort_keys=True) + "\n")
   r = requests.post(url=url, json=comment, headers=headers)
   if r.status_code == 200:
-    print("DEBUG: Success")
+    if (debug): print("DEBUG: Success")
   else:
-    print("DEBUG: Failure")
-    debugData = dump.dump_all(r)
-    print("DEBUG: Data dump:\n" + debugData.decode('utf-8'))
+    print(f"ERROR: Unable to post PR comment to Azure DevOps. Error code: {r.status_code}")
     print(r.text)
-
+    sys.exit(1)

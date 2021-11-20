@@ -109,6 +109,7 @@ import base64
 import base64
 import hmac
 import hashlib
+import globals
 
 import pandas as pd
 pd.set_option('display.max_rows', 100000)
@@ -135,19 +136,6 @@ def makeSignature(body, secret):
   print("signature = {0}".format(signature))
   return signature
 
-def emit(msg, *args):
-    print(msg % args)
-
-def print_work_item(work_item):
-  emit(
-      "{0} {1}: {2}".format(
-      work_item.fields["System.WorkItemType"],
-      work_item.id,
-      work_item.fields["System.Title"],
-    )
-  )
-
-
 def get_coverity_work_items(context):
     wit_client = context.connection.clients.get_work_item_tracking_client()
     wiql = Wiql(
@@ -161,31 +149,27 @@ def get_coverity_work_items(context):
             [System.Tags]
         from WorkItems
         where [System.Title] CONTAINS 'Coverity'
+        and [System.State] == 'Active'
         order by [System.ChangedDate] desc"""
     )
     # We limit number of results to 30 on purpose
     wiql_results = wit_client.query_by_wiql(wiql, top=20).work_items
-    emit("Results: {0}".format(len(wiql_results)))
 
     work_item_keys = dict()
 
     if wiql_results != None:
-        print("wiql_results")
         # WIQL query gives a WorkItemReference with ID only
         # => we get the corresponding WorkItem from id
         work_items = (
             wit_client.get_work_item(int(res.id)) for res in wiql_results
         )
-        print(work_items)
         for work_item in work_items:
-          print("Matching in title=" + work_item.fields["System.Title"])
+          if (globals.debug): print("DEBUG: Matching in title=" + work_item.fields["System.Title"])
           match = re.search('\[(................................)\]', work_item.fields["System.Title"])
           if match:
             finding_key = match.group(1)
-            print(f"DEBUG: Found key: {finding_key}")
+            if (globals.debug): print(f"DEBUG: Found key: {finding_key}")
             work_item_keys[finding_key] = 1
-
-          #print_work_item(work_item)
 
     return work_item_keys
 
@@ -251,7 +235,7 @@ def createAzWorkItem(title, body, assignedTo, workItemType, issue):
   #azJsonPatches.append(azJsonPatch)
 
   azPost = json.dumps(azJsonPatches)
-  print("DEBUG: azPost = " + azPost)
+  if (globals.debug): print("DEBUG: azPost = " + azPost)
 
 
   # Ad commensts to PR
@@ -268,30 +252,17 @@ def createAzWorkItem(title, body, assignedTo, workItemType, issue):
     'Authorization': 'Basic '+ authorization
   }
 
-  print("DEBUG: perform API Call to ADO" + url +" : " + json.dumps(azJsonPatches, indent = 4, sort_keys=True) + "\n")
+  if (globals.debug): print("DEBUG: perform API Call to ADO" + url +" : " + json.dumps(azJsonPatches, indent = 4, sort_keys=True) + "\n")
   r = requests.post(url, json=azJsonPatches, headers=headers)
 
   if r.status_code == 200:
-    print("DEBUG: Success")
-    print("text")
-    print(r.text)
+    print(f"INFO: Success exporting '{title}' to Azure Boards")
+    if (globals.debug):
+        print(r.text)
     return r.json()
   else:
-    print("DEBUG: Failure")
-    print("url")
-    print(r.request.url)
-    print("headers")
-    print(r.request.headers)
-    print("body")
-    print(r.request.body)
-    print("method")
-    print(r.request.method)
-    print("status_code")
-    print(r.status_code)
-    print("text")
+    print(f"ERROR: Failure exporting '{title}' to Azure Boards: Error {r.status_code}")
     print(r.text)
-
-
 
 def getEventsWithSource(url, headers, findingId, runId):
     endpoint = url + '/api/code-analysis/v0/events-with-source'
@@ -308,29 +279,14 @@ def getEventsWithSource(url, headers, findingId, runId):
     r = requests.get(endpoint, headers=headers, params=params )
 
     if r.status_code == 200:
-      print("DEBUG: Success")
-      print("url")
-      print(r.request.url)
-      print(r.text)
       return r.json()['data'][0]
     else:
-      print("DEBUG: Failure")
-      print("url")
-      print(r.request.url)
-      print("headers")
-      print(r.request.headers)
-      print("body")
-      print(r.request.body)
-      print("method")
-      print(r.request.method)
-      print("status_code")
-      print(r.status_code)
-      print("text")
+      print(f"ERROR: Unable to get events with source for findingId={findingId} in runId={runId}: Error code {r.status_code}")
       print(r.text)
       return None
 
 def getSource(url, headers, runId, path):
-    print("DEBUG: getSource(" + url + ", headers, " + runId + ", " + path + ")")
+    if (globals.debug): print("DEBUG: getSource(" + url + ", headers, " + runId + ", " + path + ")")
     endpoint = url + '/api/code-analysis/v0/source-code'
     params = dict([
         ('run-id',runId),
@@ -339,11 +295,8 @@ def getSource(url, headers, runId, path):
 
     r = requests.get(endpoint, headers=headers, params=params )
 
-    if r.status_code == 200:
-      print("DEBUG: Success")
-      print(r.text)
-    else:
-      print("DEBUG: Failure")
+    if r.status_code != 200:
+      print(f"ERORR: Unable to get source code for path={path} and runId={runId}: Error code {r.status_code}")
       print(r.text)
 
     return r.text
@@ -451,9 +404,8 @@ where SPEC is a comma delimited list of one or more of the following:
 
     args = parser.parse_args()
 
-    polaris.debug = debug = int(args.debug)
+    polaris.debug = globals.debug = int(args.debug)
     reportSpec = args.spec.split(',')
-    if debug: print(args)
 
     if ((args.url == None) or (args.token == None)):
         print('FATAL: POLARIS_SERVER_URL and POLARIS_ACCESS_TOKEN must be set via environment variables or the CLI')
@@ -466,39 +418,35 @@ where SPEC is a comma delimited list of one or more of the following:
     polaris.baseUrl, polaris.jwt, polaris.session = polaris.createSession(args.url, args.token)
 
     projectId, branchId = polaris.getProjectAndBranchId(args.project, args.branch)
-    if debug: print("projectId = " + projectId)
-    if debug: print("branchId = " + branchId)
+    if globals.debug:
+        print(f"DEBUG: projectId = {projectId} branchId = {branchId}")
 
     if any(column in args.spec for column in ['owner','status','comment','jira','closed_data']):
         getTriage = True
     else: getTriage = False
 
-    print("BEFORE GETRUNS")
     runs = polaris.getRuns(projectId, branchId)
-    print("AFTER GETRUNS")
     currRunId = runs[0]['runId']
 
     if args.new or args.fixed: # run comparison use cmpIssuesForRuns
         code_snip_runid = currRunId
 
-        if debug: print ('currRunId = ' + currRunId)
+        if globals.debug: print(f"DEBUG: currRunId = {currRunId}")
+
         if (args.compare == None):
             try: cmpRunId = runs[1]['runId']
             # if no previous run, compare with self
             except: cmpRunId = currRunId
         else:
             compareId = polaris.getBranchId(projectId, args.compare)
-            if debug: print('compare = ' + args.compare + '\ncompareId = ' + compareId)
-            print("BEFORE GETRUNS2")
+            if globals.debug: print(f"DEBUG: Compare = {args.compare} compareId = {compareId}")
             runs = polaris.getRuns(projectId, compareId)
-            print("AFTER GETRUNS2")
             cmpRunId = runs[0]['runId']
 
             code_snip_runid = cmpRunId
 
-        if debug: print ('cmpRunId = ' + cmpRunId)
-        new_issues_df, fixed_issues_df = \
-          polaris.cmpIssuesForRuns(projectId, currRunId, cmpRunId, getTriage)
+        if globals.debug: print(f"DEBUG: cmpRunId = {cmpRunId}")
+        new_issues_df, fixed_issues_df = polaris.cmpIssuesForRuns(projectId, currRunId, cmpRunId, getTriage)
         if args.new: issues = new_issues_df
         if args.fixed: issues = fixed_issues_df
     else: # no comparison, set a filter and use getIssues
@@ -517,15 +465,11 @@ where SPEC is a comma delimited list of one or more of the following:
             filter=dict([('filter[issue][status-opened-date][gte]', str(args.date) + 'Z')])
         else: # args.opened
             filter=dict([('filter[issue][status][eq]', 'opened')])
-        if debug: print(filter)
-        print("BEFORE GETISSUES")
+        if globals.debug: print(f"DEBUG: filter=" + filter)
         issues = polaris.getIssues(projectId, branchId, currRunId, polaris.MAX_LIMIT, filter, getTriage, True)
-        print("AFTER GETISSUES")
-    if (debug > 3):
+    if (globals.debug > 3):
+        print(f"DEBUG: issues=")
         print(issues)
-
-    # Loop through found issues
-    print("=============\n")
 
     jwt = polaris.getJwt(args.url, args.token)
     headers = { 'Authorization' : 'Bearer ' + jwt, 'Content-Type' : 'application/vnd.api+json', 'Accept' : 'application/json' }
@@ -539,22 +483,20 @@ where SPEC is a comma delimited list of one or more of the following:
     if args.az_work_items:
         azWorkItemsCreated = []
 
-        print("DEBUG: Fetch current list of Az Work Items")
+        if (globals.debug): print("DEBUG: Fetch current list of Az Work Items")
         work_items_exported = getAzWorkItems()
 
-        print("DEBUG: For each issue matching criteria...")
-        print("==========")
-        print(issues)
-        print("==========")
+        if (globals.debug):
+            print("DEBUG: For each issue matching criteria...")
+            print(issues)
         for issue in issues:
-            print(issue)
             if (issue['finding-key'] in work_items_exported):
-                print(f"DEBUG: Skipping finding key {issue['finding-key']} becsause it has already been exported")
+                if (globals.debug): print(f"DEBUG: Skipping finding key {issue['finding-key']} becsause it has already been exported")
                 continue
 
             event_tree = getEventsWithSource(args.url, headers, issue['finding-key'], code_snip_runid)
             if (event_tree == None):
-                print("DEBUG: Issue " + issue['finding-key'] + " not found in run " + code_snip_runid + ", skipping")
+                if (globals.debug): print("DEBUG: Issue " + issue['finding-key'] + " not found in run " + code_snip_runid + ", skipping")
                 continue
             events = event_tree['events']
 
@@ -568,15 +510,6 @@ where SPEC is a comma delimited list of one or more of the following:
             ticket_body = ticket_body + "The issue was first detected on " + first_detected + "<br>"
             ticket_body = ticket_body + "<br>"
 
-            print("DEBUG: events=" + json.dumps(events, indent = 4, sort_keys=True))
-
-            ## First sort events
-            #events_sorted = len(events) * [None]
-            #event_index = 0
-            #for event in events:
-            #    event_index = event['event-number'] - 1
-            #    events_sorted[event_index] = event
-
             currentFile = ""
             for event in events:
                 eventNumber = str(event['event-number'])
@@ -586,13 +519,7 @@ where SPEC is a comma delimited list of one or more of the following:
                     ticket_body = ticket_body + "From " + event['path'][-1] + ": <br>"
                     currentFile = event['path'][-1]
                 currentFile = event['path'][-1]
-                print("DEBUG: Event " + event['event-tag'] + " #" + eventNumber + " in " + event['filePath'])
-                #sourceReturn = getSource(args.url, headers, code_snip_runid, event['filePath'])
-
-                #if (event['event-tag'] == "remediation"):
-                #    ticket_body = ticket_body + "#" + eventNumber + ": " + event['event-tag']
-                #if (('source-before' in event and event['source-before']) or ('source-after' in event and event['source-after'])):
-                #  ticket_body = ticket_body + "From " + event['path'][-1] + ":" + str(event['line-number']) + ": <br>"
+                if (globals.debug): print("DEBUG: Event " + event['event-tag'] + " #" + eventNumber + " in " + event['filePath'])
 
                 if ('source-before' in event and event['source-before']):
                     separate_lines = event['source-before']['source-code'].splitlines()
@@ -619,8 +546,8 @@ where SPEC is a comma delimited list of one or more of the following:
                         ticket_body = ticket_body + pre_line
                     ticket_body = ticket_body + "\n</pre>\n"
 
-            print("DEBUG: ticket body=\n" + ticket_body)
-            title = "Coverity - " + issue['name'] +"  in " + main_file + " [" + issue['finding-key'] + "]"
+            if (globals.debug): print("DEBUG: ticket body=\n" + ticket_body)
+            title = "Coverity - " + issue['name'] +" in " + main_file + " [" + issue['finding-key'] + "]"
             assignedTo = ""
             workItemType = "Issue"
 
@@ -631,11 +558,6 @@ where SPEC is a comma delimited list of one or more of the following:
             azWorkItem['main_file'] = main_file
             azWorkItem['url'] = wi['_links']['html']['href']
             azWorkItemsCreated.append(azWorkItem)
-
-            print(azWorkItemsCreated)
-            print("EXIT EARLY...")
-            #sys.exit(0)
-            print("=============\n")
 
     # create a dataframe from issues dictionary
     df = pd.DataFrame(issues)
@@ -673,6 +595,4 @@ where SPEC is a comma delimited list of one or more of the following:
 
     if args.exit1_if_issues: sys.exit(1)
     else: sys.exit(0)
-
-# ---------------------------
 
