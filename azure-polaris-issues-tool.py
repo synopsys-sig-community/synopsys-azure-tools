@@ -116,6 +116,11 @@ pd.set_option('display.max_columns', 50)
 pd.set_option('display.width', 1000)
 pd.set_option('display.max_colwidth', 300)
 
+from types import SimpleNamespace
+from azure.devops.credentials import BasicAuthentication
+from azure.devops.connection import Connection
+from azure.devops.v5_1.work_item_tracking.models import Wiql
+
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -129,6 +134,77 @@ def makeSignature(body, secret):
   signature = hmac.new(secret_key, total_params, hashlib.sha256).hexdigest()
   print("signature = {0}".format(signature))
   return signature
+
+def emit(msg, *args):
+    print(msg % args)
+
+def print_work_item(work_item):
+  emit(
+      "{0} {1}: {2}".format(
+      work_item.fields["System.WorkItemType"],
+      work_item.id,
+      work_item.fields["System.Title"],
+    )
+  )
+
+
+def get_coverity_work_items(context):
+    wit_client = context.connection.clients.get_work_item_tracking_client()
+    wiql = Wiql(
+        query="""
+        select [System.Id],
+            [System.WorkItemType],
+            [System.Title],
+            [System.State],
+            [System.AreaPath],
+            [System.IterationPath],
+            [System.Tags]
+        from WorkItems
+        where [System.Title] CONTAINS 'Coverity'
+        order by [System.ChangedDate] desc"""
+    )
+    # We limit number of results to 30 on purpose
+    wiql_results = wit_client.query_by_wiql(wiql, top=20).work_items
+    emit("Results: {0}".format(len(wiql_results)))
+
+    work_item_keys = dict()
+
+    if wiql_results != None:
+        print("wiql_results")
+        # WIQL query gives a WorkItemReference with ID only
+        # => we get the corresponding WorkItem from id
+        work_items = (
+            wit_client.get_work_item(int(res.id)) for res in wiql_results
+        )
+        print(work_items)
+        for work_item in work_items:
+          print("Matching in title=" + work_item.fields["System.Title"])
+          match = re.search('\[(................................)\]', work_item.fields["System.Title"])
+          if match:
+            finding_key = match.group(1)
+            print(f"DEBUG: Found key: {finding_key}")
+            work_item_keys[finding_key] = 1
+
+          #print_work_item(work_item)
+
+    return work_item_keys
+
+def getAzWorkItems():
+  accessToken = os.getenv('SYSTEM_ACCESSTOKEN')
+  SYSTEM_COLLECTIONURI = os.getenv('SYSTEM_COLLECTIONURI')
+
+  context = SimpleNamespace()
+  context.runner_cache = SimpleNamespace()
+
+  # setup the connection
+  context.connection = Connection(
+    base_url=SYSTEM_COLLECTIONURI,
+    creds=BasicAuthentication('PAT', accessToken),
+    user_agent='synopsys-azure-tools/1.0')
+
+  work_items_exported = get_coverity_work_items(context)
+
+  return work_items_exported
 
 def createAzWorkItem(title, body, assignedTo, workItemType, issue):
   accessToken = os.getenv('SYSTEM_ACCESSTOKEN')
@@ -463,12 +539,19 @@ where SPEC is a comma delimited list of one or more of the following:
     if args.az_work_items:
         azWorkItemsCreated = []
 
+        print("DEBUG: Fetch current list of Az Work Items")
+        work_items_exported = getAzWorkItems()
+
         print("DEBUG: For each issue matching criteria...")
         print("==========")
         print(issues)
         print("==========")
         for issue in issues:
             print(issue)
+            if (issue['finding-key'] in work_items_exported):
+                print(f"DEBUG: Skipping finding key {issue['finding-key']} becsause it has already been exported")
+                continue
+
             event_tree = getEventsWithSource(args.url, headers, issue['finding-key'], code_snip_runid)
             if (event_tree == None):
                 print("DEBUG: Issue " + issue['finding-key'] + " not found in run " + code_snip_runid + ", skipping")
@@ -537,7 +620,7 @@ where SPEC is a comma delimited list of one or more of the following:
                     ticket_body = ticket_body + "\n</pre>\n"
 
             print("DEBUG: ticket body=\n" + ticket_body)
-            title = "Coverity - " + issue['name'] +"  in " + main_file
+            title = "Coverity - " + issue['name'] +"  in " + main_file + " [" + issue['finding-key'] + "]"
             assignedTo = ""
             workItemType = "Issue"
 
