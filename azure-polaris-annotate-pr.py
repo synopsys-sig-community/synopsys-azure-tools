@@ -98,9 +98,7 @@ SYSTEM_COLLECTIONURI = os.getenv('SYSTEM_COLLECTIONURI')
 SYSTEM_PULLREQUEST_PULLREQUESTID = os.getenv('SYSTEM_PULLREQUEST_PULLREQUESTID')
 SYSTEM_TEAMPROJECT = os.getenv('SYSTEM_TEAMPROJECT')
 BUILD_REPOSITORY_ID = os.getenv('BUILD_REPOSITORY_ID')
-url = f"{SYSTEM_COLLECTIONURI}{SYSTEM_TEAMPROJECT}/_apis/git/repositories/" \
-  f"{BUILD_REPOSITORY_ID}/pullRequests/{SYSTEM_PULLREQUEST_PULLREQUESTID}" \
-  "/threads?api-version=6.0"
+url = f"{SYSTEM_COLLECTIONURI}{SYSTEM_TEAMPROJECT}/_apis/git/repositories/{BUILD_REPOSITORY_ID}/pullRequests/{SYSTEM_PULLREQUEST_PULLREQUESTID}/threads?api-version=6.0"
 
 accessToken = os.getenv('SYSTEM_ACCESSTOKEN')
 authorization = str(base64.b64encode(bytes(':' + accessToken, 'ascii')), 'ascii')
