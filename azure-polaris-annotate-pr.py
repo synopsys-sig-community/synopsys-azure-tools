@@ -117,3 +117,7 @@ for comment in azComments:
     print(f"ERROR: Unable to post PR comment to Azure DevOps. Error code: {r.status_code}")
     print(r.text)
     sys.exit(1)
+
+if (len(azComments) > 0):
+  print("INFO: New security weaknesses found, returning exit code 1 to break the build")
+  sys.exit(1)
