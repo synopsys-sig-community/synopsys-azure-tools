@@ -1739,10 +1739,14 @@ def setTriage(projectId, issueId, triage_data):
             'type':'triage-issues'
         }
     }
-    if (debug >= 5): print(json_data)
+    if (debug >= 5):
+        print(endpoint)
+        print(json_data)
     response = session.post(endpoint, data=json.dumps(json_data))
-    if debug: print(response)
-    if response.status_code != 200: printError(response.json()['errors'][0])
+    if debug:
+        print(response)
+        print(response.text)
+    if response.status_code != 200 and response.status_code != 201: printError(response.json()['errors'][0])
     return response
 
 # -----------------------------------------------------------------------------
