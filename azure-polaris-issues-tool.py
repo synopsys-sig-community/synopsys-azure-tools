@@ -216,6 +216,12 @@ def createAzWorkItem(title, body, assignedTo, workItemType, issue):
   azJsonPatches.append(azJsonPatch)
 
   #System.AssignedTo
+  if (assignedTo != None):
+      azJsonPatch = dict()
+      azJsonPatch['op'] = "add"
+      azJsonPatch['path'] = "/fields/System.AssignedTo"
+      azJsonPatch['value'] = assignedTo
+      azJsonPatches.append(azJsonPatch)
 
   azJsonPatch = dict()
   azJsonPatch['op'] = "add"
@@ -427,8 +433,13 @@ where SPEC is a comma delimited list of one or more of the following:
         getTriage = True
     else: getTriage = False
 
+    if (args.az_work_items):
+        getTriage = True
+
     runs = polaris.getRuns(projectId, branchId)
     currRunId = runs[0]['runId']
+
+    code_snip_runid = currRunId
 
     if args.new or args.fixed: # run comparison use cmpIssuesForRuns
         code_snip_runid = currRunId
@@ -467,11 +478,10 @@ where SPEC is a comma delimited list of one or more of the following:
             filter=dict([('filter[issue][status-opened-date][gte]', str(args.date) + 'Z')])
         else: # args.opened
             filter=dict([('filter[issue][status][eq]', 'opened')])
-        if globals.debug: print(f"DEBUG: filter=" + filter)
         issues = polaris.getIssues(projectId, branchId, currRunId, polaris.MAX_LIMIT, filter, getTriage, True)
     if (globals.debug > 3):
         print(f"DEBUG: issues=")
-        print(issues)
+        #print(issues)
 
     jwt = polaris.getJwt(args.url, args.token)
     headers = { 'Authorization' : 'Bearer ' + jwt, 'Content-Type' : 'application/vnd.api+json', 'Accept' : 'application/json' }
@@ -507,8 +517,15 @@ where SPEC is a comma delimited list of one or more of the following:
             main_loc = str(event_tree['main-event-line-number'])
 
             ticket_body = ""
-            ticket_body = ticket_body + "<h3>Coverity - " + issue['name'] + " (CWE " + issue['cwe'] + ") in " +  main_file + "</h3>\n"
-            ticket_body = ticket_body + issue['description'] + " " + issue['local_effect'] + "<br>"
+            if (issue['cwe'] != None):
+                ticket_body = ticket_body + "<h3>Coverity - " + issue['name'] + " (CWE " + issue['cwe'] + ") in " +  main_file + "</h3>\n"
+            else:
+                ticket_body = ticket_body + "<h3>Coverity - " + issue['name'] + " (CWE N/A) in " + main_file + "</h3>\n"
+
+            if (issue['local_effect'] != None):
+                ticket_body = ticket_body + issue['description'] + " " + issue['local_effect'] + "<br>"
+            else:
+                ticket_body = ticket_body + issue['description'] + "<br>"
             first_detected = str(issue['first_detected']) + "<br>"
             ticket_body = ticket_body + "The issue was first detected on " + first_detected + "<br>"
             ticket_body = ticket_body + "<br>"
@@ -554,6 +571,15 @@ where SPEC is a comma delimited list of one or more of the following:
             assignedTo = ""
             workItemType = "Issue"
 
+            if globals.debug: print(f"DEBUG: issue owner={issue['owner']} email={issue['owner_email']}")
+
+            owner = issue['owner']
+            ## For testbed environ,ent
+            #if (owner_email != None and owner_email == "jcroall@synopsys.com"):
+            #    owner_email = "James Croall"
+
+            assignedTo = owner
+
             wi = createAzWorkItem(title, ticket_body, assignedTo, workItemType, issue)
             azWorkItem = dict()
             azWorkItem['name'] = issue['name']
@@ -564,6 +590,7 @@ where SPEC is a comma delimited list of one or more of the following:
 
     # create a dataframe from issues dictionary
     df = pd.DataFrame(issues)
+
 
     # get issue count. exit if nothing returned
     count = len(df.index)

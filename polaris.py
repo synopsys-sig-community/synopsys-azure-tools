@@ -872,6 +872,7 @@ def getIssues(projectId, branchId, runId, limit=MAX_LIMIT, filter=None, triage=F
         if triage:
             triage_start = datetime.now()
             triage_owner = None
+            triage_email = None
             triage_status = None
             triage_comment = None
             triage_jira_ticket = None
@@ -888,6 +889,7 @@ def getIssues(projectId, branchId, runId, limit=MAX_LIMIT, filter=None, triage=F
                         if triage_hist_value['attribute-semantic-id'] == 'OWNER':
                             triage_userid = triage_hist_value['value']
                             triage_owner = getUserById(triage_userid)['data']['attributes']['name']
+                            triage_email = getUserById(triage_userid)['data']['attributes']['email']
                         elif triage_hist_value['attribute-semantic-id'] == 'COMMENTARY':
                             if  triage_hist_value['display-value'].startswith('JIRA ticket:'):
                                 triage_jira_ticket = triage_hist_value['display-value'][len('JIRA ticket:')] # Jira ticket url should be first
@@ -907,6 +909,7 @@ def getIssues(projectId, branchId, runId, limit=MAX_LIMIT, filter=None, triage=F
             # create the dictionary entry
             triage_dct = {
                 'owner': triage_owner, 'comment': triage_comment, \
+                'owner_email': triage_email, \
                 'status': triage_status, 'jira': triage_jira_ticket
                  }
             triage_end = datetime.now()
