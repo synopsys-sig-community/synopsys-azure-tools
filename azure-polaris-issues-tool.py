@@ -492,6 +492,7 @@ where SPEC is a comma delimited list of one or more of the following:
             print("DEBUG: For each issue matching criteria...")
             print(issues)
         for issue in issues:
+            print(f"DEBUG: issue finding-key={issue['finding-key']} {issue}")
             if (issue['finding-key'] in work_items_exported):
                 if (globals.debug): print(f"DEBUG: Skipping finding key {issue['finding-key']} becsause it has already been exported")
                 continue

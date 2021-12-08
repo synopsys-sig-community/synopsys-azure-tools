@@ -1405,10 +1405,11 @@ def getUsers(groupId, filter, service, limit=MAX_LIMIT):
     # loop over the list of users and grab the fields we want to include in the dictionary
     dictionary = []
     for user in getPaginatedData(endpoint, params, limit):
-        print(f"DEBUG: {user}")
-
         id = user['id']
-        enabled = user['attributes']['enabled']
+        if 'enabled' in user['attributes']:
+            enabled = user['attributes']['enabled']
+        else:
+            enabled = True
         name = user['attributes']['name']
         email = user['attributes']['email']
         username = user['attributes']['username']
