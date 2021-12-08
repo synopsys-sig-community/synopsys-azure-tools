@@ -215,6 +215,8 @@ def createAzWorkItem(title, body, assignedTo, workItemType, issue):
   azJsonPatch['value'] = body
   azJsonPatches.append(azJsonPatch)
 
+  #System.AssignedTo
+
   azJsonPatch = dict()
   azJsonPatch['op'] = "add"
   azJsonPatch['path'] = "/fields/System.Tags"
