@@ -16,6 +16,14 @@ import ssl
 #logging.getLogger('suds.client').setLevel(logging.DEBUG)
 #logging.getLogger('suds.transport').setLevel(logging.DEBUG)
 
+from suds.plugin import MessagePlugin
+
+class LogPlugin(MessagePlugin):
+  def sending(self, context):
+    print(str(context.envelope))
+  def received(self, context):
+    print(str(context.reply))
+
 
 # -----------------------------------------------------------------------------
 class WebServiceClient:
@@ -43,7 +51,9 @@ class WebServiceClient:
         else:
             raise "unknown web service type: " + webservice_type
 
+        #self.client = Client(self.wsdlFile, cache=None, plugins=[LogPlugin()])
         self.client = Client(self.wsdlFile, cache=None)
+
 
         self.security = Security()
         self.token = UsernameToken(username, password)
@@ -100,6 +110,7 @@ class ConfigServiceClient(WebServiceClient):
         sfsDO = self.client.factory.create('streamFilterSpecDataObj')
         sfsDO.namePattern = streamName
 
+        print(f"DEBUG: Get streamName={streamName}")
         return self.client.service.getStreams(sfsDO)
 
     def get_user(self, connectUser):
