@@ -17,11 +17,7 @@ from wscoverity import WebServiceClient, ConfigServiceClient, DefectServiceClien
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Report on analysis results")
     parser.add_argument('--url', dest='url', help="Connect server URL");
-    parser.add_argument('--build-url', dest='buildUrl', help="url to CI build", );
-    parser.add_argument('--max-prior', dest='maxPrior', help="max prior outstanding defects to list", );
-    parser.add_argument('--max-files', dest='maxFiles', help="max files analyzed to list", );
     parser.add_argument('--debug', default=0, help='set debug level [0-9]')
-    parser.add_argument('--long-format', action='store_true', help='dismissed issues')
 
     group1 = parser.add_argument_group('required arguments')
     group1.add_argument('--dir', dest='dir', required=True, help="intermediate directory");
@@ -31,8 +27,6 @@ if __name__ == '__main__':
 
     cov_user = os.getenv("COV_USER")
     cov_passphrase = os.getenv("COVERITY_PASSPHRASE")
-
-    long_format = args.long_format
 
     o = urlparse(args.url)
     host = o.hostname
@@ -129,5 +123,3 @@ if __name__ == '__main__':
             print(f"DEBUG: CID {cid} is unique")
             defectReport = defectreport.generateDefectReportForMergedDefect(defectServiceClient, md, args.stream, False)
             print(f"DEBUG: Defect Report=\n{defectReport}")
-
-            if (cid == 10039): sys.exit(1)
