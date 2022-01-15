@@ -8,105 +8,10 @@ import ssl
 import zlib
 import base64
 
+import defectreport
 
 from urllib.parse import urlparse
-
 from wscoverity import WebServiceClient, ConfigServiceClient, DefectServiceClient
-
-def generateDefectReportForMergedDefect(defectService, mergedDefect, streamName, doHtml):
-    defectReportHtml = ""
-
-    cids = []
-    cids.append(mergedDefect['cid'])
-    streamDefects = []
-
-    print(f"DEBUG: Get for {cid} and {streamName}")
-    streamDefects = defectService.get_stream_defects(mergedDefect['cid'], [streamName])
-
-    print(f"DEBUG: StreamDefects:")
-    print(streamDefects)
-
-    sd = streamDefects[0]
-    di = sd['defectInstances'][0]
-    for event in di.events:
-        if event.main:
-            break
-
-    mainEvent = event
-    mainFileId = mainEvent['fileId']
-
-    fileId = event['fileId']
-
-    # Find multiple-file events
-    multiFileEvents = []
-    mainFileEvents = []
-    multiFileEventsByFile = dict()
-    for event in di.events:
-        if event['eventKind'] == "MULTI":
-            multiFileEvents.append(event)
-            if event['fileId']['filePathname'] not in multiFileEventsByFile:
-                multiFileEventsByFile['filePathname'] = []
-            multiFileEventsByFile['filePathname'].append(event)
-        else:
-            mainFileEvents.append(event)
-
-    defectReportBuf = ""
-    if (doHtml):
-        defectReportBuf = "<span class=\"trough\">"
-        defectReportBuf += "</span>"
-        defectReportBuf += "<span class=\"filename\">"
-        defectReportBuf += "From " + mainFileId['filePathname']
-        defectReportBuf += ":<span>\n"
-        defectReportBuf += "\n"
-        defectReportBuf += generateDefectReportForEvents(defectService, sd, mainFileId, mainFileEvents, 0, doHtml)
-    else:
-        defectReportBuf = "From "
-        defectReportBuf += mainFileId['filePathname']
-        defectReportBuf += ":\n"
-        defectReportBuf += "\n"
-        defectReportBuf += generateDefectReportForEvents(defectService, sd, mainFileId, mainFileEvents, 0, doHtml)
-
-    # TODO: Come back to related events
-
-    print(f"DEBUG: defectReportBuf={defectReportBuf}")
-
-    return
-
-
-def decode_base64_and_inflate( b64string ):
-    decoded_data = base64.b64decode( b64string )
-    return zlib.decompress( decoded_data )
-
-
-def deflate_and_base64_encode( string_val ):
-    zlibbed_str = zlib.compress( string_val )
-    compressed_string = zlibbed_str[2:-4]
-    return base64.b64encode( compressed_string )
-
-
-def inflateSourceFile(defectService, fileId, streamId):
-
-    print("inflateSourceFile")
-    print(streamId)
-
-    fileContents = defectService.get_file_contents(streamId['name'], fileId)
-    inflatedFileContents = str(decode_base64_and_inflate(fileContents['contents']))
-
-    print(fileContents)
-    print(inflatedFileContents)
-    return ""
-
-
-def generateDefectReportForEvents(defectService, sd, fileId, fileEvents, indent, doHtml, doMulti = False):
-    defectReportBuf = ""
-
-    indentStr = ""
-    for i in range(0, indent, 1):
-        indentStr += "    "
-
-    mainFileContents = inflateSourceFile(defectService, fileId, sd['streamId'])
-
-    return ""
 
 # -----------------------------------------------------------------------------
 if __name__ == '__main__':
@@ -115,6 +20,8 @@ if __name__ == '__main__':
     parser.add_argument('--build-url', dest='buildUrl', help="url to CI build", );
     parser.add_argument('--max-prior', dest='maxPrior', help="max prior outstanding defects to list", );
     parser.add_argument('--max-files', dest='maxFiles', help="max files analyzed to list", );
+    parser.add_argument('--debug', default=0, help='set debug level [0-9]')
+    parser.add_argument('--long-format', action='store_true', help='dismissed issues')
 
     group1 = parser.add_argument_group('required arguments')
     group1.add_argument('--dir', dest='dir', required=True, help="intermediate directory");
@@ -125,6 +32,8 @@ if __name__ == '__main__':
     cov_user = os.getenv("COV_USER")
     cov_passphrase = os.getenv("COVERITY_PASSPHRASE")
 
+    long_format = args.long_format
+
     o = urlparse(args.url)
     host = o.hostname
     port = str(o.port)
@@ -133,6 +42,8 @@ if __name__ == '__main__':
         do_ssl = True
     else:
         do_ssl = False
+
+    debug = args.debug
 
     if host is None or port is None or cov_user is None or cov_passphrase is None:
         print("Must specify Connect server and authentication details on command line or configuration file")
@@ -216,5 +127,7 @@ if __name__ == '__main__':
     for cid in new_defects.keys():
         for md in new_defects[cid]:
             print(f"DEBUG: CID {cid} is unique")
-            generateDefectReportForMergedDefect(defectServiceClient, md, args.stream, True)
+            defectReport = defectreport.generateDefectReportForMergedDefect(defectServiceClient, md, args.stream, False)
+            print(f"DEBUG: Defect Report=\n{defectReport}")
 
+            if (cid == 10039): sys.exit(1)
