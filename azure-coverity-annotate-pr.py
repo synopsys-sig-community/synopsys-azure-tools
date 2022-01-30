@@ -9,18 +9,75 @@ import urllib
 import glob
 import requests
 import base64
+from urllib.parse import urlparse
+from wscoverity import WebServiceClient, ConfigServiceClient, DefectServiceClient
+import ssl
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
                                  description='Post Coverity issue summary to Azure Repos Pull Request Threads')
 parser.add_argument('--debug', default=0, help='set debug level [0-9]')
 parser.add_argument('--coverity-json', default='coverity-results.json', help='Coverity output JSON')
+parser.add_argument('--sigma-json', default=None, help='Coverity output JSON')
+parser.add_argument('--url', required=True, help='Coverity Connect URL')
+parser.add_argument('--stream', required=True, help='Coverity stream name for reference')
 
 args = parser.parse_args()
 
 debug = int(args.debug)
 
 jsonFile = args.coverity_json
+sigma_json = args.sigma_json
+url = args.url
+stream = args.stream
+
+coverity_username = os.getenv("COV_USER")
+coverity_passphrase = os.getenv("COVERITY_PASSPHRASE")
+
+if (coverity_username == None or coverity_passphrase == None):
+    print(f"ERROR: Must specificy COV_USER and COVERITY_PASSPHRASE environment variables")
+    sys.exit(1)
+
+o = urlparse(args.url)
+host = o.hostname
+port = str(o.port)
+scheme = o.scheme
+if scheme == "https":
+    do_ssl = True
+    port = "443"
+else:
+    do_ssl = False
+
+# TODO Properly handle self-signed certificates, but this is challenging in Python
+try:
+    _create_unverified_https_context = ssl._create_unverified_context
+except AttributeError:
+    # Legacy Python that doesn't verify HTTPS certificates by default
+    pass
+else:
+    # Handle target environment that doesn't support HTTPS verification
+    ssl._create_default_https_context = _create_unverified_https_context
+
+print(f"DEBUG: Connect to host={host} port={port}")
+defectServiceClient = DefectServiceClient(host, port, do_ssl, coverity_username, coverity_passphrase)
+
+mergedDefectDOs = defectServiceClient.get_merged_defects_for_stream(stream)
+
+# Look for merge keys seen in reference stream - but ignore if they are "Fixed" since we will want to include
+# them if they are re-introduced
+merge_keys_seen_in_ref = dict()
+for md in mergedDefectDOs:
+    for dsa in md.defectStateAttributeValues:
+        adId = dsa.attributeDefinitionId
+        if (adId.name == "DefectStatus"):
+            advId = dsa.attributeValueId
+            if (advId.name != "Fixed"):
+                merge_keys_seen_in_ref[md.mergeKey] = 1
+
+if debug: print(f"DEBUG: merge_keys_seen_in_ref={merge_keys_seen_in_ref}")
+
+total_issues_commented = 0
+
 
 # Process output from Polaris CLI
 with open(jsonFile, encoding='utf-8') as f:
@@ -28,6 +85,18 @@ with open(jsonFile, encoding='utf-8') as f:
 
 print("INFO: Reading Coverity incremental analysis results from " + jsonFile)
 if (debug): print("DEBUG: " + json.dumps(data, indent=4, sort_keys=True) + "\n")
+
+local_issues = data['issues']
+issues_to_report = dict()
+issues_to_comment_on = []
+for issue in local_issues:
+    if "SIGMA." in issue['checkerName']: continue
+    if issue['mergeKey'] in merge_keys_seen_in_ref:
+        if debug: print(f"DEBUG: merge key {issue['mergeKey']} seen in reference stream, file={issue['strippedMainEventFilePathname']}")
+    else:
+        if debug: print(f"DEBUG: merge key {issue['mergeKey']} NOT seen in reference stream, file={issue['strippedMainEventFilePathname']}")
+        issues_to_report[issue['mergeKey']] = issue
+        issues_to_comment_on.append(issue)
 
 # Get a list of all merge keys seen in analysis
 seen_in_analysis = dict()
@@ -68,6 +137,8 @@ for thread in r.json()['value']:
     if debug: print(f"DEBUG: Thread={json.dumps(thread, indent=4, sort_keys=True)}")
 
     for comment in thread['comments']:
+        if "content" not in comment:
+            continue
         match = re.search('<!-- Coverity (\S+) -->', comment['content'])
         if match:
             coverity_mk = match.group(1)
@@ -105,7 +176,7 @@ sast_report["version"] = "2.0"
 vulnerabilities = []
 azComments = []
 
-for item in data["issues"]:
+for item in issues_to_comment_on:
 
     if item['mergeKey'] in seen_in_comments:
         if debug: print(f"DEBUG: Merge key {item['mergeKey']} already seen in comments, do not create another comment")
@@ -182,6 +253,10 @@ for item in data["issues"]:
     newComment["status"] = "active"
 
     azComments.append(newComment)
+
+
+
+
 
 # Ad commensts to PR
 SYSTEM_COLLECTIONURI = os.getenv('SYSTEM_COLLECTIONURI')
