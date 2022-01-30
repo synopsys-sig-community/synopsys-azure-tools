@@ -90,7 +90,7 @@ local_issues = data['issues']
 issues_to_report = dict()
 issues_to_comment_on = []
 for issue in local_issues:
-    if "SIGMA." in issue['checkerName']: continue
+    #if "SIGMA." in issue['checkerName']: continue
     if issue['mergeKey'] in merge_keys_seen_in_ref:
         if debug: print(f"DEBUG: merge key {issue['mergeKey']} seen in reference stream, file={issue['strippedMainEventFilePathname']}")
     else:
