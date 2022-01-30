@@ -34,6 +34,8 @@ seen_in_analysis = dict()
 for issue in data["issues"]:
     seen_in_analysis[issue['mergeKey']] = 1
 
+if debug: print(f"DEBUG: seen_in_analysis={seen_in_analysis}")
+
 seen_in_comments = dict()
 
 # Get list of open threads
