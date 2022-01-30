@@ -23,7 +23,7 @@ debug = int(args.debug)
 jsonFile = args.coverity_json
 
 # Process output from Polaris CLI
-with open(jsonFile) as f:
+with open(jsonFile, encoding='utf-8') as f:
     data = json.load(f)
 
 print("INFO: Reading Coverity incremental analysis results from " + jsonFile)
