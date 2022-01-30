@@ -384,6 +384,8 @@ if __name__ == '__main__':
             # XXX For test environment ignore siguser username
             if owner == "siguser":
                 owner = None
+            if owner == "Unassigned":
+                owner = None
 
             assignedTo = owner
 
