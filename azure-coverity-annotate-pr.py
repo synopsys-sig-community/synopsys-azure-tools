@@ -31,7 +31,7 @@ if (debug): print("DEBUG: " + json.dumps(data, indent=4, sort_keys=True) + "\n")
 
 # Get a list of all merge keys seen in analysis
 seen_in_analysis = dict()
-for ite, in data["issues"]:
+for item in data["issues"]:
     seen_in_analysis[item['mergeKey']] = 1
 
 if debug: print(f"DEBUG: seen_in_analysis={seen_in_analysis}")
