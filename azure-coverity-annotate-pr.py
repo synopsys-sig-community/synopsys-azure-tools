@@ -31,8 +31,8 @@ if (debug): print("DEBUG: " + json.dumps(data, indent=4, sort_keys=True) + "\n")
 
 # Get a list of all merge keys seen in analysis
 seen_in_analysis = dict()
-for issue in data["issues"]:
-    seen_in_analysis[issue['mergeKey']] = 1
+for ite, in data["issues"]:
+    seen_in_analysis[item['mergeKey']] = 1
 
 if debug: print(f"DEBUG: seen_in_analysis={seen_in_analysis}")
 
@@ -107,8 +107,8 @@ azComments = []
 
 for item in data["issues"]:
 
-    if issue['mergeKey'] in seen_in_comments:
-        if debug: print(f"DEBUG: Merge key {issue['mergeKey']} already seen in comments, do not create another comment")
+    if item['mergeKey'] in seen_in_comments:
+        if debug: print(f"DEBUG: Merge key {item['mergeKey']} already seen in comments, do not create another comment")
         continue
 
     checkerName = item["checkerName"]
@@ -145,21 +145,19 @@ for item in data["issues"]:
     comment["parentCommentId"] = 0
     comment["commentType"] = 1
 
-    commentContent = ":warning: Coverity Static Analysis found this issue with your code:\n\n" + description + "\n\n[View the full issue report in Coverity](http://synopsys.com)"
-
-    comment_body = f"**Coverity found issue: {checkerProperties['subcategoryShortDescription']} - CWE-{checkerProperties['cweCategory']}, {checkerProperties['impact']} Severity**\n\n"
+    comment_body = f"**:warning: Coverity found issue: {checkerProperties['subcategoryShortDescription']} - CWE-{checkerProperties['cweCategory']}, {checkerProperties['impact']} Severity**\n\n"
     # BAD_CERT_VERIFICATION: The "checkServerIdentity" property in the "tls.connect()" function uses bad cert verification.
     #comment_body += f"**{checkerProps['subcategoryLocalEffect']}**\n\n"
 
     if (description):
-        comment_body += f"**{issue['checkerName']}**: {description} {checkerProperties['subcategoryLocalEffect']}\n\n"
+        comment_body += f"**{item['checkerName']}**: {description} {checkerProperties['subcategoryLocalEffect']}\n\n"
     else:
-        comment_body += f"**{issue['checkerName']}**: {checkerProperties['subcategoryLocalEffect']}\n\n"
+        comment_body += f"**{item['checkerName']}**: {checkerProperties['subcategoryLocalEffect']}\n\n"
 
     if remediation:
         comment_body += f"**How to fix:** {remediation}\n"
 
-    comment_body += f"\n<!-- Coverity {issue['mergeKey']} -->\n"
+    comment_body += f"\n<!-- Coverity {item['mergeKey']} -->\n"
 
     comment["content"] = comment_body
     comments.append(comment)
