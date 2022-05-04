@@ -277,7 +277,7 @@ if __name__ == '__main__':
 
     # Process output from Polaris CLI
     with open(coverity_json) as f:
-        data = json.load(f)
+        data = json.load(f, encoding="utf-8")
 
     print("INFO: Reading Coverity incremental analysis results from " + coverity_json)
     if (debug): print("DEBUG: " + json.dumps(data, indent=4, sort_keys=True) + "\n")
