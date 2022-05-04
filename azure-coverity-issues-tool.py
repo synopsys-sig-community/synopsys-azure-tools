@@ -276,8 +276,8 @@ if __name__ == '__main__':
             new_defects[mergeKey] = defect
 
     # Process output from Polaris CLI
-    with open(coverity_json) as f:
-        data = json.load(f, 'r+', encoding="utf-8")
+    with open(coverity_json, encoding="utf-8") as f:
+        data = json.load(f)
 
     print("INFO: Reading Coverity incremental analysis results from " + coverity_json)
     if (debug): print("DEBUG: " + json.dumps(data, indent=4, sort_keys=True) + "\n")
